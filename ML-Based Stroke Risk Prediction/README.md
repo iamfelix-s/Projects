@@ -84,6 +84,9 @@ The dataset used for training the model is from the [Heart Disease Dataset](http
 
 ## Model Development
 
-1. _Data Preprocessing:_ The dataset is cleaned, and necessary transformations are applied (e.g., handling missing values, encoding categorical features).
-2. _Model Selection:_ Various machine learning algorithms (e.g., Logistic Regression, Decision Trees, Random Forest, etc.) are evaluated for prediction accuracy.
-3. _Model Training:_ The best model is trained and optimized using techniques like cross-validation and grid search.
+1. _Data Preprocessing:_
+         The dataset is cleaned, and necessary transformations are applied (e.g., handling missing values, encoding categorical features).
+3. _Model Selection:_
+         Various machine learning algorithms (e.g., Logistic Regression, Decision Trees, Random Forest, etc.) are evaluated for prediction accuracy.
+5. _Model Training:_
+         The best model is trained and optimized using techniques like cross-validation and grid search.
