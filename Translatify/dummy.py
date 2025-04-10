@@ -8,18 +8,38 @@ import sounddevice as sd
 import scipy.io.wavfile
 import tempfile
 import os
+import re
+from gtts import gTTS
+import base64
 
-# Page setup
-st.set_page_config(page_title="Translatify", layout="centered")
-st.title("🌍 Translatify - Multilingual Translator")
+st.set_page_config(page_title="Translatify Chatbot", layout="centered")
 
-page = st.sidebar.radio("Navigation", ["Translator", "History"])
+def set_background(image_file):
+    with open(image_file, "rb") as image:
+        encoded = base64.b64encode(image.read()).decode()
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-image: url("data:image/jpg;base64,{encoded}");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
-# Initialize session state
-if "input_text" not in st.session_state:
-    st.session_state.input_text = ""
+set_background("bg.jpg") 
 
-# DB setup
+st.image("logo.png", width=50)
+
+st.title("𓀃 Translatify - A Multilingual Translator")
+page = st.sidebar.radio("Navigate", ["Translate", "History"])
+
+# Database setup
 conn = sqlite3.connect('translation_history.db', check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute('''
@@ -33,38 +53,65 @@ cursor.execute('''
 ''')
 conn.commit()
 
-# Load models based on language
 @st.cache_resource
 def load_model_and_tokenizer(lang):
-    if lang == "German":
+    if lang.lower() == "german":
         tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
         model = MarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-    elif lang == "Tamil":
+    elif lang.lower() == "tamil":
         tokenizer = AutoTokenizer.from_pretrained("suriya7/English-to-Tamil")
         model = AutoModelForSeq2SeqLM.from_pretrained("suriya7/English-to-Tamil")
-    else:  # Hinglish
-        tokenizer = AutoTokenizer.from_pretrained("Hinglish/Bhashini-Hinglish-translation")
-        model = AutoModelForSeq2SeqLM.from_pretrained("Hinglish/Bhashini-Hinglish-translation")
+    elif lang.lower() == "french":
+        tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-fr")
+        model = MarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-fr")
+    elif lang.lower() == "hindi":
+        tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-hi")
+        model = MarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-hi")
+    elif lang.lower() == "spanish":
+        tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-es")
+        model = MarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-es")
+    elif lang.lower() == "malayalam":
+        tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-ml")
+        model = MarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-ml")
+    else:
+        return None, None
     return tokenizer, model
 
-if page == "Translator":
-    st.subheader("Translate English to German, Tamil or Hinglish")
-    language_option = st.selectbox("Choose Target Language", ["German", "Tamil", "Hinglish"])
+def extract_translation_request(sentence):
+    languages = ["german", "tamil", "french", "hindi", "spanish", "malayalam"]
+    sentence = sentence.lower()
+    target_lang = next((lang for lang in languages if lang in sentence), None)
+    if not target_lang:
+        return None, None
+    phrase = re.sub(r"(what\s+is\s+the\s+meaning\s+of|translate|what\s+is\s+mean\s+by)\s*", "", sentence)
+    phrase = re.sub(r"\s+in\s+" + target_lang, "", phrase).strip()
+    return phrase, target_lang.capitalize()
 
-    tokenizer, model = load_model_and_tokenizer(language_option)
+# gTTS language code mapping
+gtts_lang_codes = {
+    "German": "de",
+    "Tamil": "ta",
+    "French": "fr",
+    "Hindi": "hi",
+    "Spanish": "es",
+    "Malayalam": "ml"
+}
 
-    input_method = st.radio("Choose input method:", ["Type Text", "Speak"])
+if page == "Translate":
+    st.subheader("💬 Ask your translation question")
 
-    if input_method == "Type Text":
-        st.session_state.input_text = st.text_area("Enter English text:", height=150)
+    input_method = st.radio("Choose input method:", ["Type your translation question:", "Speak your translation question:"])
+    query = ""
+
+    if input_method == "Type your translation question:":
+        query = st.text_input("Ask your translation question:", placeholder="e.g., What is the meaning of Hello in Tamil")
 
     else:
         st.info("🎙️ Click 'Start Recording', then speak. Click 'Stop Recording' once done.")
-
         duration = st.slider("Recording duration (seconds):", 2, 10, 5)
 
         if st.button("🎤 Start Recording"):
-            fs = 16000  # Sample rate
+            fs = 16000
             st.info("Recording...")
             recording = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='int16')
             sd.wait()
@@ -79,32 +126,48 @@ if page == "Translator":
                 audio = recognizer.record(source)
 
             try:
-                text = recognizer.recognize_google(audio)
-                st.session_state.input_text = text
+                query = recognizer.recognize_google(audio)
                 st.success("You said:")
-                st.write(f"🗣️ {text}")
+                st.write(f"🗣️ {query}")
             except Exception as e:
                 st.error(f"Speech recognition error: {e}")
             finally:
                 os.unlink(audio_path)
 
-    if st.button("Translate"):
-        if st.session_state.input_text.strip():
-            inputs = tokenizer(st.session_state.input_text, return_tensors="pt", padding=True)
-            translated_tokens = model.generate(**inputs)
-            translated_text = tokenizer.decode(translated_tokens[0], skip_special_tokens=True)
+    if query:
+        phrase, lang = extract_translation_request(query)
+        if phrase and lang:
+            tokenizer, model = load_model_and_tokenizer(lang)
+            if tokenizer is None or model is None:
+                st.error("❌ Could not load model for that language.")
+            else:
+                inputs = tokenizer(phrase, return_tensors="pt", padding=True)
+                outputs = model.generate(**inputs)
+                translated = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-            st.success(f"✅ Translation to {language_option}:")
-            st.write(translated_text)
+                st.success(f"✅ Translation in {lang}:")
+                st.write(f"💬 {translated}")
 
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            cursor.execute('''
-                INSERT INTO history (input_text, translated_text, target_language, timestamp)
-                VALUES (?, ?, ?, ?)
-            ''', (st.session_state.input_text, translated_text, language_option, timestamp))
-            conn.commit()
+                gtts_code = gtts_lang_codes.get(lang)
+                if gtts_code:
+                    try:
+                        tts = gTTS(text=translated, lang=gtts_code)
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audio_file:
+                            tts.save(audio_file.name)
+                            st.audio(audio_file.name, format="audio/mp3")
+                    except Exception as e:
+                        st.warning(f"🔇 Could not convert to audio: {e}")
+                else:
+                    st.warning(f"🔇 Audio not supported for language: {lang}")
+
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                cursor.execute('''
+                    INSERT INTO history (input_text, translated_text, target_language, timestamp)
+                    VALUES (?, ?, ?, ?)
+                ''', (phrase, translated, lang, timestamp))
+                conn.commit()
         else:
-            st.warning("⚠️ Please enter or say something first.")
+            st.warning("⚠️ Try asking like: What is the meaning of Hello in Tamil")
 
 elif page == "History":
     st.subheader("📜 Translation History")

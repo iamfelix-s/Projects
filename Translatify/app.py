@@ -10,12 +10,37 @@ import tempfile
 import os
 import re
 from gtts import gTTS
+import base64
 
-# Set Streamlit page config
 st.set_page_config(page_title="Translatify Chatbot", layout="centered")
-st.image("logo.png", width=50)
-st.title("🤖 Translatify - A Multilingual Translator")
-page = st.sidebar.radio("Navigate", ["Translate", "History"])
+
+def set_background(image_file):
+    with open(image_file, "rb") as image:
+        encoded = base64.b64encode(image.read()).decode()
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-image: url("data:image/jpg;base64,{encoded}");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+set_background("bg.jpg") 
+
+st.sidebar.image("logo_redefined.png", width=150, use_column_width=False)
+
+
+st.title("𓀃 Translatify - A Multilingual Translator")
+st.sidebar.title("📚 Navigation Menu")
+page = st.sidebar.radio("Select Page", ["Translate", "History"])
+
 
 # Database setup
 conn = sqlite3.connect('translation_history.db', check_same_thread=False)
@@ -58,17 +83,14 @@ def load_model_and_tokenizer(lang):
 def extract_translation_request(sentence):
     languages = ["german", "tamil", "french", "hindi", "spanish", "malayalam"]
     sentence = sentence.lower()
-
     target_lang = next((lang for lang in languages if lang in sentence), None)
     if not target_lang:
         return None, None
-
     phrase = re.sub(r"(what\s+is\s+the\s+meaning\s+of|translate|what\s+is\s+mean\s+by)\s*", "", sentence)
     phrase = re.sub(r"\s+in\s+" + target_lang, "", phrase).strip()
-
     return phrase, target_lang.capitalize()
 
-# Language code mapping for gTTS
+# gTTS language code mapping
 gtts_lang_codes = {
     "German": "de",
     "Tamil": "ta",
@@ -81,10 +103,10 @@ gtts_lang_codes = {
 if page == "Translate":
     st.subheader("💬 Ask your translation question")
 
-    input_method = st.radio("Choose input method:", ["Text - Text", "Speech - Text"])
+    input_method = st.radio("Choose input method:", ["Type your translation question:", "Speak your translation question:"])
     query = ""
 
-    if input_method == "Text - Text":
+    if input_method == "Type your translation question:":
         query = st.text_input("Ask your translation question:", placeholder="e.g., What is the meaning of Hello in Tamil")
 
     else:
@@ -117,7 +139,6 @@ if page == "Translate":
 
     if query:
         phrase, lang = extract_translation_request(query)
-
         if phrase and lang:
             tokenizer, model = load_model_and_tokenizer(lang)
             if tokenizer is None or model is None:
@@ -130,7 +151,6 @@ if page == "Translate":
                 st.success(f"✅ Translation in {lang}:")
                 st.write(f"💬 {translated}")
 
-                # Audio output
                 gtts_code = gtts_lang_codes.get(lang)
                 if gtts_code:
                     try:
@@ -143,7 +163,6 @@ if page == "Translate":
                 else:
                     st.warning(f"🔇 Audio not supported for language: {lang}")
 
-                # Save to database
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 cursor.execute('''
                     INSERT INTO history (input_text, translated_text, target_language, timestamp)
@@ -157,7 +176,6 @@ elif page == "History":
     st.subheader("📜 Translation History")
     cursor.execute('SELECT input_text, translated_text, target_language, timestamp FROM history ORDER BY id DESC')
     records = cursor.fetchall()
-
     if records:
         for input_text, translated_text, lang, time in records:
             st.markdown(f"**🕒 {time} | 🌐 {lang}**")
