@@ -1,0 +1,7 @@
+streamlit
+gtts
+speechrecognition
+sounddevice
+scipy
+deep-translator
+mysql-connector-python
